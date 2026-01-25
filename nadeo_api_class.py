@@ -2,7 +2,7 @@ import pandas as pd
 from datetime import datetime
 from collections import Counter
 import nadeo_api.live as live
-import nadeo_api.live as core
+import nadeo_api.oauth as oauth
 
 class NadeoLiveAPI:
     def __init__(self, token):
@@ -139,7 +139,7 @@ class NadeoLiveAPI:
 
         return pd.DataFrame(players_with_author)
 
-class NadeoCoreAPI:
+class NadeoOAuthAPI:
     def __init__(self, token):
         """
         Classe pour interagir avec l'API Nadeo Core.
@@ -159,13 +159,14 @@ class NadeoCoreAPI:
         Returns:
             pd.DataFrame: colonnes ['accountId', 'displayName']
         """
-        # Appel API via core.get pour rester cohérent avec ton code
-        endpoint = (
-            f"/api/display-names?accountId[]={accountId}"
+        data = oauth.get_account_names_from_ids(
+           token=self.token,
+           account_ids=accountId)
+        
+        # data = {'uuid': 'name', ...}
+        df = pd.DataFrame(
+            data.items(),
+            columns=["accountId", "displayName"]
         )
-        data = core.get(token=self.token, endpoint=endpoint)
 
-        # data = {accountId: displayName}
-        records = [{"accountId": aid, "displayName": name} for aid, name in data.items()]
-
-        return pd.DataFrame(records)
+        return df

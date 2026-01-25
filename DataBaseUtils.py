@@ -2,7 +2,7 @@ import sqlite3
 
 class GameDatabase:
     def __init__(self, db_name="game_records.db"):
-        self.conn = sqlite3.connect(db_name)
+        self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self._create_tables()
         # Index pour accélérer les counts et jointures
