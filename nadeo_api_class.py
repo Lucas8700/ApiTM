@@ -3,6 +3,7 @@ from datetime import datetime
 from collections import Counter
 import nadeo_api.live as live
 import nadeo_api.oauth as oauth
+import re
 
 class NadeoLiveAPI:
     def __init__(self, token):
@@ -28,16 +29,8 @@ class NadeoLiveAPI:
                 record = {
                     "year": year,
                     "month": month_num,
-                    "day": day.get("day"),
                     "monthDay": day.get("monthDay"),
-                    "campaignId": day.get("campaignId"),
-                    "mapUid": day.get("mapUid"),
-                    "seasonUid": day.get("seasonUid"),
-                    "leaderboardGroup": day.get("leaderboardGroup"),
-                    "startTimestamp": day.get("startTimestamp"),
-                    "endTimestamp": day.get("endTimestamp"),
-                    "startDatetime": datetime.fromtimestamp(day.get("startTimestamp")),
-                    "endDatetime": datetime.fromtimestamp(day.get("endTimestamp"))
+                    "mapUid": day.get("mapUid")
                 }
                 records.append(record)
 
@@ -51,54 +44,25 @@ class NadeoLiveAPI:
         data = live.get(token=self.token, endpoint=endpoint)
         return {
             "uid": data.get("uid"),
-            "mapId": data.get("mapId"),
             "name": data.get("name"),
             "author": data.get("author"),
-            "submitter": data.get("submitter"),
             "authorTime": data.get("authorTime"),
-            "goldTime": data.get("goldTime"),
-            "silverTime": data.get("silverTime"),
-            "bronzeTime": data.get("bronzeTime"),
-            "nbLaps": data.get("nbLaps"),
-            "valid": data.get("valid"),
-            "downloadUrl": data.get("downloadUrl"),
-            "thumbnailUrl": data.get("thumbnailUrl"),
-            "uploadTimestamp": data.get("uploadTimestamp"),
-            "updateTimestamp": data.get("updateTimestamp"),
-            "fileSize": data.get("fileSize"),
-            "public": data.get("public"),
-            "favorite": data.get("favorite"),
-            "playable": data.get("playable"),
-            "mapStyle": data.get("mapStyle"),
-            "mapType": data.get("mapType"),
-            "collectionName": data.get("collectionName")
+            "goldTime": data.get("goldTime")
         }
 
     def get_map_top(self, group_uid, map_uid, length=50, only_world=True, offset=0):
         """
         Récupère le top leaderboard d'une map.
         """
-        endpoint = (
-            f"api/token/leaderboard/group/{group_uid}/map/{map_uid}/top"
-            f"?length={length}&onlyWorld={str(only_world).lower()}&offset={offset}"
-        )
-        data = live.get(token=self.token, endpoint=endpoint)
+        data = live.get_map_leaderboard(token=self.token, mapUid=map_uid, groupUid=group_uid, length=length, onlyWorld=only_world, offset=offset)
         records = []
 
         for top_zone in data.get("tops", []):
-            zone_id = top_zone.get("zoneId")
-            zone_name = top_zone.get("zoneName")
             for entry in top_zone.get("top", []):
                 records.append({
-                    "groupUid": data.get("groupUid"),
                     "mapUid": data.get("mapUid"),
-                    "zoneId": zone_id,
-                    "zoneName": zone_name,
                     "accountId": entry.get("accountId"),
-                    "position": entry.get("position"),
-                    "score": entry.get("score"),
-                    "timestamp": entry.get("timestamp"),
-                    "datetime": datetime.fromtimestamp(entry.get("timestamp"))
+                    "score": entry.get("score")
                 })
         return pd.DataFrame(records)
 
@@ -125,6 +89,9 @@ class NadeoLiveAPI:
         last_player_above_author = True
 
         while last_player_above_author:
+            if (offset+100) > 10000:
+                last_player_above_author = False
+                break
             df_leader = self.get_map_top(group_uid=group_uid, map_uid=map_uid, length=100, offset=offset)
             for _, row in df_leader.iterrows():
                 if row["score"] <= author_time:
@@ -170,3 +137,93 @@ class NadeoOAuthAPI:
         )
 
         return df
+
+
+
+TM_COLOR_RE = re.compile(r"\$([0-9a-fA-F]{3})")
+
+def tm2020_to_html(text: str) -> str:
+    html = ""
+    i = 0
+    open_spans = []
+
+    def close_all():
+        nonlocal html, open_spans
+        while open_spans:
+            html += open_spans.pop()
+
+    while i < len(text):
+        if text[i] == "$" and i + 1 < len(text):
+            code = text[i + 1]
+
+            # Escaped dollar
+            if code == "$":
+                html += "$"
+                i += 2
+                continue
+
+            # Italic
+            if code == "i":
+                html += "<span style='font-style: italic;'>"
+                open_spans.append("</span>")
+                i += 2
+                continue
+
+            # Bold
+            if code == "o":
+                html += "<span style='font-weight: bold;'>"
+                open_spans.append("</span>")
+                i += 2
+                continue
+
+            # Wide
+            if code == "w":
+                html += "<span style='letter-spacing: 0.15em;'>"
+                open_spans.append("</span>")
+                i += 2
+                continue
+
+            # Shadow
+            if code == "s":
+                html += (
+                    "<span style='text-shadow: "
+                    "1px 1px 2px rgba(0,0,0,0.6);'>"
+                )
+                open_spans.append("</span>")
+                i += 2
+                continue
+
+            # Reset
+            if code in ("n", "z"):
+                close_all()
+                i += 2
+                continue
+
+            # Gradient (approximation)
+            if code == "G":
+                html += (
+                    "<span style='"
+                    "background: linear-gradient(90deg, #ff00ff, #00ffff);"
+                    "background-clip: text;"
+                    "-webkit-background-clip: text;"
+                    "color: transparent;'>"
+                )
+                open_spans.append("</span>")
+                i += 2
+                continue
+
+            # Color ($f6f etc.)
+            match = TM_COLOR_RE.match(text, i)
+            if match:
+                color = match.group(1)
+                html += f"<span style='color: #{color};'>"
+                open_spans.append("</span>")
+                i += 4
+                continue
+
+        # Normal character
+        html += text[i]
+        i += 1
+
+    close_all()
+    return html

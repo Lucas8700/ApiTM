@@ -1,0 +1,14 @@
+For the streamlit site: A Title: “TOTD Author ranking”
+A display showing the ranking of players with the most author medals. 
+The display shows ranking + player name + number of author medals + number of missing author medals compared to the total number of maps
+
+We want the display to be by pages of 50 players, and only the top 10000 players possibly shown on the site
+
+Ability to click on a player name. 
+Once the player is clicked, display all maps in chronological order from most recent to oldest
+Display shows the release date of the map + map name + map author + the number of people who have the author medal + author time + 
+author medal logo if the player has the medal on this map + time of the player. Gaps between each month for easy differentiation
+We want the ability to sort by increasing/decreasing number of people who have the author medal
+
+
+We want a search bar that allows to search by player names

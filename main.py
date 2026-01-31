@@ -34,12 +34,11 @@ apiLive = NadeoLiveAPI(tokenLive)
 
 df_totd_maps = apiLive.get_totd_maps(
     length=1, # Mois
-    offset=1  # Offset Mois+
+    offset=0  # Offset Mois+
 )
 
 for _, row in df_totd_maps.iterrows():
 # for _, row in df_totd_maps.iloc[:2].iterrows():
-    print(row["startDatetime"])
 
     fb_players_with_author = apiLive.get_players_with_author(
         group_uid="Personal_Best",
@@ -53,18 +52,17 @@ for _, row in df_totd_maps.iterrows():
             map_id=row["mapUid"],
             score=playerRow["score"])
 
+#  rows = db.get_players_by_record_count_cursor(limit=50, ascending=False)
 
-rows = db.get_players_by_record_count_cursor(limit=50, ascending=False)
 
+#  apiCore = NadeoOAuthAPI(tokenCore)
+#  name = [name for _, name, _ in rows]
+#  df = apiCore.get_display_names(name)
 
-apiCore = NadeoOAuthAPI(tokenCore)
-name = [name for _, name, _ in rows]
-df = apiCore.get_display_names(name)
+#  id_to_display = dict(
+#      zip(df["accountId"], df["displayName"])
+#  )
 
-id_to_display = dict(
-    zip(df["accountId"], df["displayName"])
-)
-
-for player_id, name, count in rows:
-    display_name = id_to_display.get(name, "Unknown")
-    print(f"{name} ({display_name}) (ID {player_id}) a {count} record(s)")
+#  for player_id, name, count in rows:
+#      display_name = id_to_display.get(name, "Unknown")
+#      print(f"{name} ({display_name}) (ID {player_id}) a {count} record(s)")

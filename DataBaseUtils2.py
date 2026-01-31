@@ -18,7 +18,7 @@ class GameDatabase:
         # Maps
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS Maps (
-                map_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                map_id TEXT PRIMARY KEY,
                 map_name TEXT NOT NULL,
                 map_author TEXT NOT NULL,
                 release_date DATE NOT NULL,
@@ -38,7 +38,7 @@ class GameDatabase:
             CREATE TABLE IF NOT EXISTS Player_Times (
                 time_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER NOT NULL,
-                map_id INTEGER NOT NULL,
+                map_id TEXT NOT NULL,
                 player_time INTEGER NOT NULL,
                 UNIQUE(player_id, map_id),
                 FOREIGN KEY (player_id) REFERENCES Players(player_id),
@@ -174,6 +174,72 @@ class GameDatabase:
                 query, (last_count, last_count, last_id, limit)
             )
 
+        return self.cursor.fetchall()
+
+    # --------------------
+    # Gestion des maps
+    # --------------------
+    def get_map_id(self, map_uid):
+        self.cursor.execute("SELECT map_id FROM Maps WHERE map_id = ?", (map_uid,))
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
+    def add_map_if_not_exists(self, map_uid, map_name, map_author, release_date, author_time, gold_time):
+        if self.get_map_id(map_uid) is None:
+            self.cursor.execute("""
+                INSERT INTO Maps (map_id, map_name, map_author, release_date, author_time, gold_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (map_uid, map_name, map_author, release_date, author_time, gold_time))
+            self.conn.commit()
+
+    def increment_author_count(self, map_id):
+        self.cursor.execute("UPDATE Maps SET author_count = author_count + 1 WHERE map_id = ?", (map_id,))
+        self.conn.commit()
+
+    def fill_map_with_author_medals(self, map_row, api):
+        map_uid = map_row["mapUid"]
+        map_info = api.get_map_info(map_uid)
+        release_date = f"{map_row['year']}-{map_row['month']:02d}-{map_row['monthDay']:02d}"
+        self.add_map_if_not_exists(map_uid, map_info["name"], map_info["author"], release_date, map_info["authorTime"], map_info["goldTime"])
+        fb_players = api.get_players_with_author("Personal_Best", map_uid)
+        for _, player_row in fb_players.iterrows():
+            self.add_player(player_row["player"])
+            self.set_record(player_row["player"], map_uid, player_row["score"])
+            self.increment_author_count(map_uid)
+
+    def get_total_maps(self):
+        self.cursor.execute("SELECT COUNT(*) FROM Maps")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_players_by_author_count(self, limit=50, offset=0):
+        self.cursor.execute("""
+            SELECT p.player_id, p.player_name, COUNT(pt.map_id) AS author_count
+            FROM Players p
+            LEFT JOIN Player_Times pt ON p.player_id = pt.player_id
+            GROUP BY p.player_id
+            ORDER BY author_count DESC, p.player_id
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
+        return self.cursor.fetchall()
+
+    def get_player_maps(self, player_id):
+        self.cursor.execute("""
+            SELECT m.release_date, m.map_name, m.map_author, m.author_count, m.author_time, pt.player_time
+            FROM Maps m
+            LEFT JOIN Player_Times pt ON m.map_id = pt.map_id AND pt.player_id = ?
+            ORDER BY m.release_date DESC
+        """, (player_id,))
+        return self.cursor.fetchall()
+
+    def search_players(self, query, limit=50):
+        self.cursor.execute("""
+            SELECT player_id, player_name
+            FROM Players
+            WHERE player_name LIKE ?
+            ORDER BY player_name
+            LIMIT ?
+        """, (f"%{query}%", limit))
         return self.cursor.fetchall()
 
     # --------------------
